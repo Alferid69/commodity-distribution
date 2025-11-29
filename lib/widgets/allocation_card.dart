@@ -26,6 +26,8 @@ class _AllocationCardState extends State<AllocationCard> {
       id: id,
     );
     setState(() => _loadingReject = false);
+
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -34,6 +36,7 @@ class _AllocationCardState extends State<AllocationCard> {
         backgroundColor: success ? Colors.green : Colors.red,
       ),
     );
+
     if (success) {
       setState(() {
         _statusOverride = 'rejected';

@@ -89,7 +89,6 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    print('customer..... ${widget.prefilledCustomer!.name}');
 
     return Material(
       child: Container(
@@ -284,7 +283,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<Commodity>(
-          value: value,
+          initialValue: value,
           items: items,
           onChanged: onChanged,
           decoration: InputDecoration(

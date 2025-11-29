@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:public_commodity_distribution/api/api_config.dart';
 import 'package:http/http.dart' as http;
 
@@ -19,7 +20,7 @@ class AllocationsApi {
       final data = json.decode(res.body);
       return data;
     } catch (e) {
-      print('Error fetching allocations: $e');
+      debugPrint('Error fetching allocations: $e');
       return null;
     }
   }
@@ -40,7 +41,7 @@ class AllocationsApi {
       final data = json.decode(res.body);
       return data;
     } catch (e) {
-      print('Error fetching allocations: $e');
+      debugPrint('Error fetching allocations: $e');
       return null;
     }
   }
@@ -59,10 +60,10 @@ class AllocationsApi {
       );
 
       final data = json.decode(res.body);
-      print(data);
+      debugPrint(data);
       return data;
     } catch (e) {
-      print('Error fetching allocations: $e');
+      debugPrint('Error fetching allocations: $e');
       return null;
     }
   }
@@ -84,7 +85,7 @@ class AllocationsApi {
       final data = json.decode(res.body);
       return data;
     } catch (e) {
-      print('Error creating allocation: $e');
+      debugPrint('Error creating allocation: $e');
       return null;
     }
   }
@@ -107,7 +108,7 @@ class AllocationsApi {
       final List<dynamic> allocations = data['data'];
       return allocations.where((item) => item['status'] == 'pending').length;
     } catch (e) {
-      print('Error fetching pending allocations count: $e');
+      debugPrint('Error fetching pending allocations count: $e');
       return 0;
     }
   }
@@ -126,13 +127,13 @@ class AllocationsApi {
         body: json.encode({'status': 'rejected'}),
       );
       if (res.statusCode != 200) {
-        print('Server error: ${res.statusCode}');
+        debugPrint('Server error: ${res.statusCode}');
         return false;
       }
       final data = json.decode(res.body);
       return data['status'] == 'success';
     } catch (e) {
-      print('Error rejecting allocation: $e');
+      debugPrint('Error rejecting allocation: $e');
       return false;
     }
   }
@@ -151,13 +152,13 @@ class AllocationsApi {
         body: json.encode({'status': 'approved'}),
       );
       if (res.statusCode != 200) {
-        print('Server error: ${res.statusCode}');
+        debugPrint('Server error: ${res.statusCode}');
         return false;
       }
       final data = json.decode(res.body);
       return data['status'] == 'success';
     } catch (e) {
-      print('Error approving allocation: $e');
+      debugPrint('Error approving allocation: $e');
       return false;
     }
   }

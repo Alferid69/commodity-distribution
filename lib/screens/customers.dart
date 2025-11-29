@@ -26,7 +26,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       final customerss = Customer.fromJsonList(data['data']);
       customers.addAll(customerss);
     } catch (e) {
-      print('Error fetching customers: $e');
+      debugPrint('Error fetching customers: $e');
     } finally {
       setState(() {
         _isLoading = false;

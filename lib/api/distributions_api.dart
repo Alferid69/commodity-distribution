@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:public_commodity_distribution/api/api_config.dart';
 import 'package:http/http.dart' as http;
 
@@ -18,10 +19,10 @@ class DistributionsApi {
 
       final data = json.decode(res.body);
       final sampleData = data['data'][0];
-      print('distribution data... $sampleData');
+      debugPrint('distribution data... $sampleData');
       return data;
     } catch (e) {
-      print('Error fetching distributions... $e');
+      debugPrint('Error fetching distributions... $e');
     }
   }
 
@@ -30,7 +31,7 @@ class DistributionsApi {
     required String id,
   }) async {
     try {
-      print('fetching........');
+      debugPrint('fetching........');
       final res = await http.get(
         Uri.parse('$baseUrl/to/$id'),
         headers: {
@@ -40,10 +41,10 @@ class DistributionsApi {
       );
 
       final data = json.decode(res.body);
-      print(data);
+      debugPrint(data);
       return data;
     } catch (e) {
-      print('Error fetching distributions... $e');
+      debugPrint('Error fetching distributions... $e');
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:public_commodity_distribution/api/api_config.dart';
 
@@ -15,10 +16,10 @@ class EntitiesApi {
         },
       );
       final data = json.decode(res.body);
-      print('enitites..... $data');
+      debugPrint('enitites..... $data');
       return data;
     } catch (e) {
-      print('Error fetching entities: $e');
+      debugPrint('Error fetching entities: $e');
     }
   }
 }

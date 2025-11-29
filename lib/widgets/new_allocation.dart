@@ -94,7 +94,7 @@ class _NewAllocationState extends State<NewAllocation> {
         allocationData: allocationData,
       );
 
-      if (data['status'] == 'pending') {
+      if (data['status'] == 'pending' && mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(
           context,
@@ -105,12 +105,14 @@ class _NewAllocationState extends State<NewAllocation> {
           _selectedCommodity = '';
           _selectedCooperative = '';
         });
-
+      
+        if (!mounted) return;
         Navigator.of(context).pop();
       }
 
     } catch (e) {
-      print('Error allocating... $e');
+      debugPrint('Error allocating... $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error allocating... please try again')),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:public_commodity_distribution/api/api_config.dart';
 import 'package:http/http.dart' as http;
 
@@ -20,7 +21,7 @@ class CommoditiesApi {
       return data;
 
     } catch (e) {
-      print('Error fetching commodities: $e');
+      debugPrint('Error fetching commodities: $e');
       return null;
     }
   }

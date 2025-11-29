@@ -61,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      print('Logging in .........');
+      debugPrint('Logging in .........');
       setState(() {
         _isLogging = true;
       });
@@ -70,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final token = data['token']; // ✅ correct way
       await prefs.setString('auth_token', token);
       await prefs.setString('worksAt', data['data']['user']['worksAt']);
-      print('user role is.... ${data['data']['user']['role']['name']}');
+      debugPrint('user role is.... ${data['data']['user']['role']['name']}');
       await prefs.setString('role', data['data']['user']['role']['name']);
       final userInfo = await Auth.getMe(token: token);
 
@@ -81,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } catch (e) {
-      print('Error: $e.');
+      debugPrint('Error: $e.');
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(
         context,

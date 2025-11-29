@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:public_commodity_distribution/api/api_config.dart';
 import 'package:http/http.dart' as http;
 
@@ -19,7 +20,7 @@ class RetailerCooperativesApi {
       final data = json.decode(res.body);
       return data;
     } catch (e) {
-      print('Error fetching retailer cooperatives: $e');
+      debugPrint('Error fetching retailer cooperatives: $e');
       return null;
     }
   }
@@ -38,10 +39,10 @@ class RetailerCooperativesApi {
       );
 
       final data = json.decode(res.body);
-      // print(data['data']['availableCommodity']);
+      // debugPrint(data['data']['availableCommodity']);
       return data;
     } catch (e) {
-      print('Error fetchin retailer cooperative: $e');
+      debugPrint('Error fetchin retailer cooperative: $e');
     }
   }
 }

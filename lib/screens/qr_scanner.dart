@@ -3,7 +3,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:public_commodity_distribution/api/customers_api.dart';
 import 'package:public_commodity_distribution/main.dart';
 import 'package:public_commodity_distribution/models/customer_model.dart';
-import 'package:public_commodity_distribution/widgets/new_allocation.dart';
 import 'package:public_commodity_distribution/widgets/new_transaction.dart';
 
 class QRScannerScreen extends StatefulWidget {
@@ -83,8 +82,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         token: token,
         fayda: fayda,
       );
-      final data = res['data'];
-      if (data == null) {
+
+      final data = res['data']['customer'];
+      if (data == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No customer found for Fayda $fayda')),
         );
@@ -100,6 +100,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to fetch customer: $e')));

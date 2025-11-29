@@ -45,7 +45,7 @@ class _SentRequestsState extends State<SentRequests> {
       final token = prefs.getString('auth_token');
       final worksAt = prefs.getString('worksAt');
       if (token == null || worksAt == null) {
-        print('Token or worksAt is null');
+        debugPrint('Token or worksAt is null');
         return false;
       }
       final data = await RequestsApi.getSentRequests(
@@ -65,7 +65,7 @@ class _SentRequestsState extends State<SentRequests> {
       _applySearchFilter();
       return true;
     } catch (e) {
-      print('Error getting sent requests: $e');
+      debugPrint('Error getting sent requests: $e');
       return false;
     }
   }

@@ -9,11 +9,11 @@ class ReceivedRequests extends StatefulWidget {
   final DateTime? startDate;
   final DateTime? endDate;
   const ReceivedRequests({
-    Key? key,
+    super.key,
     this.searchTerm,
     this.startDate,
     this.endDate,
-  }) : super(key: key);
+  });
 
   @override
   State<ReceivedRequests> createState() => _ReceivedRequestsState();
@@ -44,11 +44,11 @@ class _ReceivedRequestsState extends State<ReceivedRequests> {
   Future<bool> _getReceivedRequests() async {
     try {
       final worksAt = prefs.getString('worksAt');
-      print(
+      debugPrint(
         'DEBUG: _getReceivedRequests called with token=$token worksAt=$worksAt start=${widget.startDate} end=${widget.endDate}',
       );
       if (token == null || worksAt == null) {
-        print('Token or worksAt is null');
+        debugPrint('Token or worksAt is null');
         return false;
       }
       final data = await RequestsApi.getReceivedRequests(
@@ -72,7 +72,7 @@ class _ReceivedRequestsState extends State<ReceivedRequests> {
       _applySearchFilter();
       return true;
     } catch (e, st) {
-      print('Error getting received requests: $e\n$st');
+      debugPrint('Error getting received requests: $e\n$st');
       return false;
     }
   }

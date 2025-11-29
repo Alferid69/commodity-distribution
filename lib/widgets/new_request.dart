@@ -115,9 +115,10 @@ class _NewRequestScreenState extends State<NewRequestScreen> {
         data: newRequest,
       );
 
-      if (success) {
+      if (success && mounted) {
         Navigator.of(context).pop();
       } else {
+        if(!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to submit request.')),
         );

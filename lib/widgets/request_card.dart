@@ -47,7 +47,7 @@ class _RequestCardState extends State<RequestCard> {
         token: token,
         requestId: requestId,
       );
-      if (res) {
+      if (res && mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Request Approved Successfully')),
@@ -57,13 +57,14 @@ class _RequestCardState extends State<RequestCard> {
           widget.request.status = 'read';
         });
       } else {
+        if(!mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to Approve Request')));
       }
     } catch (e) {
-      print('Error approving request: $e');
+      debugPrint('Error approving request: $e');
     } finally {
       setState(() {
         _isApproving = false;

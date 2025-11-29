@@ -263,7 +263,7 @@ class _FilterTransactionsSheetState extends State<FilterTransactionsSheet> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           items: items,
           onChanged: onChanged,
           decoration: InputDecoration(

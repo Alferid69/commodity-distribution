@@ -25,7 +25,7 @@ class _RetailerInventoryState extends State<RetailerInventory> {
       _availableCommodities.addAll(Inventory.fromJsonList(data['data']['availableCommodity']));
     });
 
-    print('we have ${_availableCommodities.length} commodities');
+    debugPrint('we have ${_availableCommodities.length} commodities');
   }
 
   @override

@@ -48,7 +48,7 @@ class _MyAppState extends State<MyApp> {
   Future<String> _getUsername() async {
     final token = prefs.getString('auth_token');
     if (token != null) {
-      print('getting username from main...');
+      debugPrint('getting username from main...');
       final userInfo = await Auth.getMe(token: token);
       return userInfo['data']['name'] ?? 'User';
     }

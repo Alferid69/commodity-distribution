@@ -15,7 +15,8 @@ class TransactionsScreen extends StatefulWidget {
   State<TransactionsScreen> createState() => _TransactionsScreenState();
 }
 
-class _TransactionsScreenState extends State<TransactionsScreen> {
+class _TransactionsScreenState extends State<TransactionsScreen>
+    with SingleTickerProviderStateMixin {
   // State variables
   bool _isLoading = true;
   String _errorMessage = '';
@@ -24,7 +25,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   List<RetailerCooperative> _cooperatives = [];
   List<RetailerCooperativeShop> _shops = [];
   Map<String, List<RetailerCooperativeShop>> _shopsByCooperative = {};
-  Map<String, List<Transaction>> _transactionsByShop = {};
+  final Map<String, List<Transaction>> _transactionsByShop = {};
 
   // Aggregated data for RetailerCooperative
   int _totalTransactions = 0;
@@ -36,10 +37,25 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   late String _role;
   late String _worksAt;
 
+  // Animation controller for Skeleton/Shimmer effect
+  late AnimationController _shimmerController;
+
   @override
   void initState() {
     super.initState();
+    // Initialize shimmer controller for pulsing effect
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
     _initializeData();
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
   }
 
   void _initializeData() async {
@@ -47,16 +63,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     _role = prefs.getString('role') ?? '';
     _worksAt = prefs.getString('worksAt') ?? '';
 
-    print('User Role: $_role');
-    print('Works At: $_worksAt');
+    debugPrint('User Role: $_role');
+    debugPrint('Works At: $_worksAt');
 
     try {
       await _fetchDataBasedOnRole();
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -76,27 +94,29 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       await _fetchCooperativesByWoreda();
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _fetchShopTransactions() async {
-    final data = await TransactionsApi.fetchTransactionsByShopId(
-      token: _token,
-      shopId: _worksAt,
-    );
-    final transactions = Transaction.fromJsonList(data);
+    final results = await Future.wait([
+      TransactionsApi.fetchTransactionsByShopId(
+        token: _token,
+        shopId: _worksAt,
+      ),
+      RetailerCooperativeShopsApi.getRetailerCooperativeShopById(
+        token: _token,
+        id: _worksAt,
+      ),
+    ]);
 
-    // Find the shop
-    final shopData =
-        await RetailerCooperativeShopsApi.getRetailerCooperativeShopById(
-          token: _token,
-          id: _worksAt,
-        );
+    final transactions = Transaction.fromJsonList(results[0] as List<dynamic>);
+    final shopData = results[1] as Map<String, dynamic>;
     final shop = RetailerCooperativeShop.fromJson(shopData['data']);
 
-    // Navigate to shop transactions screen
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -108,7 +128,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   Future<void> _fetchCooperativeData() async {
-    // Fetch shops under this cooperative
     final shopsData =
         await RetailerCooperativeShopsApi.getShopsByRetailerCooperativeId(
           token: _token,
@@ -116,16 +135,22 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         );
     _shops = RetailerCooperativeShop.fromJsonList(shopsData['data'] ?? []);
 
-    // Fetch transactions for all shops
-    for (final shop in _shops) {
-      final transactionsData = await TransactionsApi.fetchTransactionsByShopId(
+    final transactionFutures = _shops.map((shop) {
+      return TransactionsApi.fetchTransactionsByShopId(
         token: _token,
         shopId: shop.id,
       );
+    }).toList();
+
+    final results = await Future.wait(transactionFutures);
+
+    for (int i = 0; i < _shops.length; i++) {
+      final shop = _shops[i];
+      final transactionsData = results[i];
       final transactions = Transaction.fromJsonList(transactionsData);
+
       _transactionsByShop[shop.id] = transactions;
 
-      // Aggregate data
       _totalTransactions += transactions.length;
       _totalQuantitySold += transactions.fold(0.0, (sum, t) => sum + t.amount);
       _totalRevenue += transactions.fold(
@@ -136,21 +161,19 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   Future<void> _fetchAllCooperativesAndShops() async {
-    // Fetch all cooperatives
-    final cooperativesData =
-        await RetailerCooperativesApi.getRetailerCooperatives(token: _token);
+    final initialResults = await Future.wait([
+      RetailerCooperativesApi.getRetailerCooperatives(token: _token),
+      RetailerCooperativeShopsApi.getRetailerCooperativeShops(token: _token),
+    ]);
+
+    final cooperativesData = initialResults[0] as Map<String, dynamic>;
+    final shopsData = initialResults[1] as Map<String, dynamic>;
+
     _cooperatives = RetailerCooperative.fromJsonList(
       cooperativesData['data'] ?? [],
     );
-
-    // Fetch all shops
-    final shopsData =
-        await RetailerCooperativeShopsApi.getRetailerCooperativeShops(
-          token: _token,
-        );
     _shops = RetailerCooperativeShop.fromJsonList(shopsData['data'] ?? []);
 
-    // Group shops by cooperative
     _shopsByCooperative = {};
     for (final shop in _shops) {
       final coopId = shop.retailerCooperativeId ?? '';
@@ -162,49 +185,72 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       }
     }
 
-    // Fetch transactions for all shops
-    for (final shop in _shops) {
-      final transactionsData = await TransactionsApi.fetchTransactionsByShopId(
+    final transactionFutures = _shops.map((shop) {
+      return TransactionsApi.fetchTransactionsByShopId(
         token: _token,
         shopId: shop.id,
       );
-      final transactions = Transaction.fromJsonList(transactionsData);
+    }).toList();
+
+    final results = await Future.wait(transactionFutures);
+
+    for (int i = 0; i < _shops.length; i++) {
+      final shop = _shops[i];
+      final transactions = Transaction.fromJsonList(results[i]);
       _transactionsByShop[shop.id] = transactions;
     }
   }
 
   Future<void> _fetchCooperativesByWoreda() async {
-    // Fetch all cooperatives and filter by woredaOffice
     final cooperativesData =
         await RetailerCooperativesApi.getRetailerCooperatives(token: _token);
     final allCooperatives = RetailerCooperative.fromJsonList(
       cooperativesData['data'] ?? [],
     );
+
     _cooperatives = allCooperatives.where((coop) {
       return coop.woredaOffice == _worksAt;
     }).toList();
 
-    // Fetch shops for these cooperatives
-    for (final coop in _cooperatives) {
-      final shopsData =
-          await RetailerCooperativeShopsApi.getShopsByRetailerCooperativeId(
-            token: _token,
-            retailerCooperativeId: coop.id,
-          );
+    final shopFutures = _cooperatives.map((coop) {
+      return RetailerCooperativeShopsApi.getShopsByRetailerCooperativeId(
+        token: _token,
+        retailerCooperativeId: coop.id,
+      );
+    }).toList();
+
+    final shopResults = await Future.wait(shopFutures);
+
+    List<Future<List<dynamic>>> transactionFutures = [];
+    List<RetailerCooperativeShop> orderedShopsForTransactions = [];
+
+    for (int i = 0; i < _cooperatives.length; i++) {
+      final coop = _cooperatives[i];
+      final shopsData = shopResults[i];
       final shops = RetailerCooperativeShop.fromJsonList(
         shopsData['data'] ?? [],
       );
+
       _shops.addAll(shops);
       _shopsByCooperative[coop.id] = shops;
 
-      // Fetch transactions for these shops
       for (final shop in shops) {
-        final transactionsData =
-            await TransactionsApi.fetchTransactionsByShopId(
-              token: _token,
-              shopId: shop.id,
-            );
-        final transactions = Transaction.fromJsonList(transactionsData);
+        orderedShopsForTransactions.add(shop);
+        transactionFutures.add(
+          TransactionsApi.fetchTransactionsByShopId(
+            token: _token,
+            shopId: shop.id,
+          ),
+        );
+      }
+    }
+
+    if (transactionFutures.isNotEmpty) {
+      final transactionResults = await Future.wait(transactionFutures);
+
+      for (int i = 0; i < orderedShopsForTransactions.length; i++) {
+        final shop = orderedShopsForTransactions[i];
+        final transactions = Transaction.fromJsonList(transactionResults[i]);
         _transactionsByShop[shop.id] = transactions;
       }
     }
@@ -216,8 +262,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
     if (_isLoading) {
       return Scaffold(
+        backgroundColor: Colors.grey[50],
         appBar: AppBar(title: const Text('Transactions'), centerTitle: true),
-        body: const Center(child: CircularProgressIndicator()),
+        // Use the new Skeleton Builder here
+        body: _buildLoadingSkeleton(),
       );
     }
 
@@ -236,16 +284,151 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       return _buildAdminView(context, textTheme);
     }
 
-    // Fallback
     return Scaffold(
       appBar: AppBar(title: const Text('Transactions'), centerTitle: true),
       body: const Center(child: Text('No data available')),
     );
   }
 
+  /// Builds a skeleton loader mimicking the actual content
+  Widget _buildLoadingSkeleton() {
+    return AnimatedBuilder(
+      animation: _shimmerController,
+      builder: (context, child) {
+        // Create a pulsing opacity effect
+        final opacity = 0.3 + (_shimmerController.value * 0.4); // 0.3 to 0.7
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Stats Row Skeleton
+                Row(
+                  children: List.generate(
+                    3,
+                    (index) => Expanded(
+                      child: Container(
+                        height: 80,
+                        margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(opacity),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 2. Section Header Skeleton
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 120,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(opacity),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // 3. List of Shop Cards Skeleton
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: 6, // Show 6 fake items
+                  itemBuilder: (context, index) {
+                    return Container(
+                      height: 140, // Approximate height of our shop card
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header (Name + ID)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 180,
+                                    height: 16,
+                                    color: Colors.grey.withOpacity(opacity),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: 100,
+                                    height: 12,
+                                    color: Colors.grey.withOpacity(opacity),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.withOpacity(opacity),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          const Divider(),
+                          const Spacer(),
+                          // Stats row inside card
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(
+                              3,
+                              (i) => Expanded(
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 10,
+                                      margin: const EdgeInsets.only(bottom: 4),
+                                      color: Colors.grey.withOpacity(opacity),
+                                    ),
+                                    Container(
+                                      width: 40,
+                                      height: 14,
+                                      color: Colors.grey.withOpacity(opacity),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildCooperativeView(BuildContext context, TextTheme textTheme) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(title: const Text('Transactions'), centerTitle: true),
       body: SingleChildScrollView(
         child: Padding(
@@ -253,7 +436,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Statistics Cards (aggregated)
               _buildStatsRow(
                 context,
                 textTheme,
@@ -262,10 +444,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 revenue: _totalRevenue.toStringAsFixed(2),
               ),
               const SizedBox(height: 24),
-
-              // Shops List
-              _buildSectionHeader(context, textTheme, 'Shops', ''),
-              const SizedBox(height: 16),
+              _buildSectionHeader(context, textTheme, 'My Shops', ''),
+              const SizedBox(height: 12),
               _buildShopsList(context, textTheme),
             ],
           ),
@@ -276,17 +456,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   Widget _buildAdminView(BuildContext context, TextTheme textTheme) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(title: const Text('Transactions'), centerTitle: true),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Cooperatives List
-              _buildCooperativesList(context, textTheme),
-            ],
+            children: [_buildCooperativesList(context, textTheme)],
           ),
         ),
       ),
@@ -294,122 +471,273 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   Widget _buildShopsList(BuildContext context, TextTheme textTheme) {
-    return Column(
-      children: _shops.map((shop) {
-        final shopTransactions = _transactionsByShop[shop.id] ?? [];
-        final shopTotalTransactions = shopTransactions.length;
-        final shopTotalQuantity = shopTransactions.fold(
-          0.0,
-          (sum, t) => sum + t.amount,
-        );
-        final shopTotalRevenue = shopTransactions.fold(
-          0.0,
-          (sum, t) => sum + (t.amount * t.commodity.price),
-        );
+    if (_shops.isEmpty) {
+      return const Center(child: Text("No shops assigned."));
+    }
 
-        return Card(
-          elevation: 0.5,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          color: Colors.white,
-          child: ListTile(
-            title: Text(shop.name, style: textTheme.bodyMedium),
-            subtitle: Text(
-              '$shopTotalTransactions transactions • ${shopTotalQuantity.toStringAsFixed(2)} qty • ${shopTotalRevenue.toStringAsFixed(2)} ETB',
-              style: textTheme.bodySmall,
-            ),
-            trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey[500]),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => ShopTransactionsScreen(
-                    shop: shop,
-                    allTransactions: shopTransactions,
-                  ),
-                ),
-              );
-            },
-          ),
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: _shops.length,
+      separatorBuilder: (ctx, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final shop = _shops[index];
+        final shopTransactions = _transactionsByShop[shop.id] ?? [];
+        return _buildEnhancedShopCard(
+          context,
+          textTheme,
+          shop,
+          shopTransactions,
         );
-      }).toList(),
+      },
     );
   }
 
   Widget _buildCooperativesList(BuildContext context, TextTheme textTheme) {
-    return Column(
-      children: _cooperatives.map((coop) {
+    if (_cooperatives.isEmpty) {
+      return const Center(child: Text("No cooperatives found."));
+    }
+
+    return ListView.separated(
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: _cooperatives.length,
+      separatorBuilder: (ctx, index) => const SizedBox(height: 16),
+      itemBuilder: (context, index) {
+        final coop = _cooperatives[index];
         final shops = _shopsByCooperative[coop.id] ?? [];
+
         final totalShops = shops.length;
-        final totalTransactions = shops.fold(
-          0,
-          (sum, shop) => sum + (_transactionsByShop[shop.id]?.length ?? 0),
-        );
-        final totalQuantity = shops.fold(
-          0.0,
-          (sum, shop) =>
-              sum +
-              (_transactionsByShop[shop.id]?.fold<double>(
-                    0.0,
-                    (s, t) => s + t.amount,
-                  ) ??
-                  0.0),
-        );
-        final totalRevenue = shops.fold(
-          0.0,
-          (sum, shop) =>
-              sum +
-              (_transactionsByShop[shop.id]?.fold<double>(
-                    0.0,
-                    (s, t) => s + (t.amount * t.commodity.price),
-                  ) ??
-                  0.0),
-        );
+        double totalRev = 0.0;
 
-        return ExpansionTile(
-          title: Text(coop.name, style: textTheme.bodyMedium),
-          subtitle: Text(
-            '$totalShops shops • $totalTransactions transactions • ${totalQuantity.toStringAsFixed(2)} qty • ${totalRevenue.toStringAsFixed(2)} ETB',
-            style: textTheme.bodySmall,
+        for (var s in shops) {
+          final trans = _transactionsByShop[s.id] ?? [];
+          totalRev += trans.fold(
+            0.0,
+            (sum, t) => sum + (t.amount * t.commodity.price),
+          );
+        }
+
+        return Card(
+          elevation: 2,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          children: shops.map((shop) {
-            final shopTransactions = _transactionsByShop[shop.id] ?? [];
-            final shopTotalTransactions = shopTransactions.length;
-            final shopTotalQuantity = shopTransactions.fold(
-              0.0,
-              (sum, t) => sum + t.amount,
-            );
-            final shopTotalRevenue = shopTransactions.fold(
-              0.0,
-              (sum, t) => sum + (t.amount * t.commodity.price),
-            );
-
-            return ListTile(
-              title: Text(shop.name, style: textTheme.bodySmall),
-              subtitle: Text(
-                '$shopTotalTransactions transactions • ${shopTotalQuantity.toStringAsFixed(2)} qty • ${shopTotalRevenue.toStringAsFixed(2)} ETB',
-                style: textTheme.bodySmall,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
               ),
-              trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey[500]),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ShopTransactionsScreen(
-                      shop: shop,
-                      allTransactions: shopTransactions,
+              title: Text(
+                coop.name,
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.storefront, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text('$totalShops Shops', style: textTheme.bodySmall),
+                    const SizedBox(width: 16),
+                    Icon(
+                      Icons.payments_outlined,
+                      size: 16,
+                      color: Colors.green[700],
                     ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${totalRev.toStringAsFixed(0)} ETB',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: Colors.green[800],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              children: [
+                Container(
+                  color: Colors.grey[50],
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: shops.map((shop) {
+                      final shopTransactions =
+                          _transactionsByShop[shop.id] ?? [];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: _buildEnhancedShopCard(
+                          context,
+                          textTheme,
+                          shop,
+                          shopTransactions,
+                          isNested: true,
+                        ),
+                      );
+                    }).toList(),
                   ),
-                );
-              },
-            );
-          }).toList(),
+                ),
+              ],
+            ),
+          ),
         );
-      }).toList(),
+      },
     );
   }
 }
 
-/// Builds the row of three statistics cards
+Widget _buildEnhancedShopCard(
+  BuildContext context,
+  TextTheme textTheme,
+  RetailerCooperativeShop shop,
+  List<Transaction> transactions, {
+  bool isNested = false,
+}) {
+  final count = transactions.length;
+  final qty = transactions.fold(0.0, (sum, t) => sum + t.amount);
+  final rev = transactions.fold(
+    0.0,
+    (sum, t) => sum + (t.amount * t.commodity.price),
+  );
+
+  return Card(
+    elevation: isNested ? 0 : 2,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: isNested
+          ? BorderSide(color: Colors.grey.shade300)
+          : BorderSide.none,
+    ),
+    color: Colors.white,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ShopTransactionsScreen(
+              shop: shop,
+              allTransactions: transactions,
+            ),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shop.name,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (shop.retailerCooperativeId != null)
+                        Text(
+                          'ID: ${shop.id.substring(0, 8)}...',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: Colors.grey,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward, size: 20, color: Colors.blue[700]),
+              ],
+            ),
+
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12.0),
+              child: Divider(height: 1),
+            ),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildMiniStat(
+                  textTheme,
+                  'Trans',
+                  '$count',
+                  Icons.receipt_long,
+                  Colors.blue,
+                ),
+                _buildMiniStat(
+                  textTheme,
+                  'Sold',
+                  qty.toStringAsFixed(1),
+                  Icons.inventory_2_outlined,
+                  Colors.orange,
+                ),
+                _buildMiniStat(
+                  textTheme,
+                  'Rev (ETB)',
+                  rev.toStringAsFixed(0),
+                  Icons.monetization_on_outlined,
+                  Colors.green,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildMiniStat(
+  TextTheme textTheme,
+  String label,
+  String value,
+  IconData icon,
+  MaterialColor color,
+) {
+  return Expanded(
+    child: Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: color[600]),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: textTheme.bodySmall?.copyWith(
+                color: Colors.grey[600],
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color[800],
+            fontSize: 15,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 Widget _buildStatsRow(
   BuildContext context,
   TextTheme textTheme, {
@@ -423,6 +751,8 @@ Widget _buildStatsRow(
         context,
         title: 'Transactions',
         value: transactions,
+        icon: Icons.receipt,
+        color: Colors.blue,
         textTheme: textTheme,
       ),
       const SizedBox(width: 12),
@@ -430,6 +760,8 @@ Widget _buildStatsRow(
         context,
         title: 'Qty Sold',
         value: qtySold,
+        icon: Icons.inventory,
+        color: Colors.orange,
         textTheme: textTheme,
       ),
       const SizedBox(width: 12),
@@ -437,40 +769,79 @@ Widget _buildStatsRow(
         context,
         title: 'Revenue',
         value: revenue,
+        icon: Icons.attach_money,
+        color: Colors.green,
         textTheme: textTheme,
       ),
     ],
   );
 }
 
-/// Helper widget for a single statistic card
 Widget _buildStatCard(
   BuildContext context, {
   required String title,
   required String value,
+  required IconData icon,
+  required MaterialColor color,
   required TextTheme textTheme,
 }) {
   return Expanded(
-    child: Card(
-      elevation: 0.5,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: textTheme.labelMedium),
-            const SizedBox(height: 8),
-            Text(value, style: textTheme.bodyLarge),
-          ],
-        ),
+    child: Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 16, color: color.shade700),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[600],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ],
       ),
     ),
   );
 }
 
-/// Builds the header for a content section (e.g., "Recent Transactions")
 Widget _buildSectionHeader(
   BuildContext context,
   TextTheme textTheme,
@@ -480,20 +851,22 @@ Widget _buildSectionHeader(
   return Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(title, style: textTheme.titleLarge),
-      TextButton(
-        onPressed: () {
-          // Handle "View all"
-        },
-        child: Text(
-          actionText,
-          style: TextStyle(
-            color: Colors.blue[700],
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
+      Text(
+        title,
+        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+      ),
+      if (actionText.isNotEmpty)
+        TextButton(
+          onPressed: () {},
+          child: Text(
+            actionText,
+            style: TextStyle(
+              color: Colors.blue[700],
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
           ),
         ),
-      ),
     ],
   );
 }

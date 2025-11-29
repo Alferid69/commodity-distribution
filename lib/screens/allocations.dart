@@ -44,7 +44,7 @@ class _AllocationsScreenState extends State<AllocationsScreen> {
       
       return true;
     } catch (e) {
-      print('Error getting allocations: $e');
+      debugPrint('Error getting allocations: $e');
       return false;
     }
   }

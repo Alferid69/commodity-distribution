@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -19,12 +20,12 @@ static Future<Map<String, dynamic>?> uploadFile(File file, String token) async {
     if (response.statusCode == 200) {
       return json.decode(resBody);
     } else {
-      print('File upload failed with status: ${response.statusCode}');
-      print('Response: $resBody');
+      debugPrint('File upload failed with status: ${response.statusCode}');
+      debugPrint('Response: $resBody');
       return null;
     }
   } catch (e) {
-    print('Failed to upload file: $e');
+    debugPrint('Failed to upload file: $e');
     return null;
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:public_commodity_distribution/api/api_config.dart';
 
@@ -23,7 +24,7 @@ class CustomersApi {
         throw Exception('Failed to load customers');
       }
     } catch (e) {
-      print('Error fetching customers: $e');
+      debugPrint('Error fetching customers: $e');
     }
   }
 
